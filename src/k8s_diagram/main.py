@@ -1,9 +1,8 @@
 import base64
-import requests, io
+import requests
+import io
 from PIL import Image
 import matplotlib.pyplot as plt
-
-from parser import parse_dictionary
 
 
 def display_graph(graph: str):
@@ -31,27 +30,4 @@ def display_graph(graph: str):
 #
 # display_graph(graph)
 
-sample_cluster = {
-    'namespaces': [
-        {
-            'name': 'console',
-            'services': [
-                {'name': 'api', 'app': 'api'},
-                {'name': 'console', 'app': 'console'}
-            ],
-            'pods': [
-                {'name': 'api-12345', 'app': 'api'},
-                {'name': 'api-67890', 'app': 'api'},
-                {'name': 'console-12345', 'app': 'console'},
-                {'name': 'console-67890', 'app': 'console'},
-            ]
-        }
-    ],
-}
-
-graph = parse_dictionary(sample_cluster)
-mermaid_js_code = graph.to_mermaid_js_code()
-
-print(mermaid_js_code)
-
-display_graph(graph.to_mermaid_js_code())
+# display_graph(graph.to_mermaid_js_code())
