@@ -4,6 +4,7 @@ from typing import Self
 
 from kubernetes.client import ApiClient, AppsV1Api, BatchV1Api, CoreV1Api, CustomObjectsApi
 
+from k8s_diagram.types.base import Graph
 from k8s_diagram.types.kubernetes import App, CronJob, Deployment, Job, Namespace, Pod, ReplicaSet, Service, StatefulSet
 
 
@@ -36,119 +37,162 @@ class Parser:
     def batch_v1_api(self) -> BatchV1Api:
         return BatchV1Api(api_client=self.api_client)
 
-    def parse(self) -> None:
+    def parse(self, included_namespaces: set[str] = None, excluded_namespaces: set[str] = None) -> Graph:
+        graph = Graph()
+
         (
             self.parse_namespaces()
-                .parse_services()
-                .parse_pods()
-                .parse_deployments()
-                .parse_replica_sets()
-                .parse_stateful_sets()
-                .parse_jobs()
-                .parse_cron_jobs()
-                .associate_services_with_namespaces()
-                .associate_pods_with_namespaces()
-                .associate_pods_with_services()
-                .associate_deployments_with_namespaces()
-                .associate_replica_sets_with_namespaces()
-                .associate_replica_sets_with_deployments()
-                .associate_pods_with_replica_sets()
-                .associate_stateful_sets_with_namespaces()
-                .associate_pods_with_stateful_sets()
-                .associate_jobs_with_namespaces()
-                .associate_pods_with_jobs()
-                .associate_cron_jobs_with_namespaces()
-                .associate_jobs_with_cron_jobs()
+            .parse_services()
+            .parse_pods()
+            .parse_deployments()
+            .parse_replica_sets()
+            .parse_stateful_sets()
+            .parse_jobs()
+            .parse_cron_jobs()
+            .associate_services_with_namespaces()
+            .associate_pods_with_namespaces()
+            .associate_pods_with_services()
+            .associate_deployments_with_namespaces()
+            .associate_replica_sets_with_namespaces()
+            .associate_replica_sets_with_deployments()
+            .associate_pods_with_replica_sets()
+            .associate_stateful_sets_with_namespaces()
+            .associate_pods_with_stateful_sets()
+            .associate_jobs_with_namespaces()
+            .associate_pods_with_jobs()
+            .associate_cron_jobs_with_namespaces()
+            .associate_jobs_with_cron_jobs()
+            .organize_into_apps()
         )
+
+        if included_namespaces is not None:
+            graph.add_graph_nodes(
+                {
+                    n_id: namespace
+                    for n_id, namespace in self.namespaces.items()
+                    if namespace.name in included_namespaces and len(namespace.graph_nodes) > 0
+                }
+            )
+        elif excluded_namespaces is not None:
+            graph.add_graph_nodes(
+                {
+                    n_id: namespace
+                    for n_id, namespace in self.namespaces.items()
+                    if namespace.name not in excluded_namespaces and len(namespace.graph_nodes) > 0
+                }
+            )
+        else:
+            graph.add_graph_nodes(self.namespaces)
+
+        return graph
 
     def parse_namespaces(self) -> Self:
         self.namespaces = dict()
 
+        count = 1
         for v1_namespace in self.core_v1_api.list_namespace().items:
-            namespace = Namespace.from_object(v1_namespace)
-
+            namespace = Namespace.from_object(v1_namespace, str(count))
             self.namespaces[namespace.name] = namespace
+
+            count += 1
 
         return self
 
     def parse_services(self) -> Self:
         self.services = dict()
 
-        for v1_service in self.core_v1_api.list_service_for_all_namespaces().items:
-            service = Service.from_object(v1_service)
+        count = 1
 
+        for v1_service in self.core_v1_api.list_service_for_all_namespaces().items:
+            service = Service.from_object(v1_service, str(count))
             self.services[service.name] = service
+            count += 1
 
         return self
 
     def parse_pods(self) -> Self:
         self.pods = dict()
 
-        for v1_pod in self.core_v1_api.list_pod_for_all_namespaces().items:
-            pod = Pod.from_object(v1_pod)
+        count = 1
 
+        for v1_pod in self.core_v1_api.list_pod_for_all_namespaces().items:
+            pod = Pod.from_object(v1_pod, str(count))
             self.pods[pod.uid] = pod
+            count += 1
 
         return self
 
     def parse_deployments(self) -> Self:
         self.deployments = dict()
 
-        for v1_deployment in self.apps_v1_api.list_deployment_for_all_namespaces().items:
-            deployment = Deployment.from_object(v1_deployment)
+        count = 1
 
+        for v1_deployment in self.apps_v1_api.list_deployment_for_all_namespaces().items:
+            deployment = Deployment.from_object(v1_deployment, str(count))
             self.deployments[deployment.name] = deployment
+            count += 1
 
         return self
 
     def parse_replica_sets(self) -> Self:
         self.replica_sets = dict()
 
-        for v1_replica_set in self.apps_v1_api.list_replica_set_for_all_namespaces().items:
-            replica_set = ReplicaSet.from_object(v1_replica_set)
+        count = 1
 
+        for v1_replica_set in self.apps_v1_api.list_replica_set_for_all_namespaces().items:
+            replica_set = ReplicaSet.from_object(v1_replica_set, str(count))
             self.replica_sets[replica_set.name] = replica_set
+            count += 1
 
         return self
 
     def parse_stateful_sets(self) -> Self:
         self.stateful_sets = dict()
 
+        count = 1
+
         for v1_stateful_set in self.apps_v1_api.list_stateful_set_for_all_namespaces().items:
-            stateful_set = StatefulSet.from_object(v1_stateful_set)
+            stateful_set = StatefulSet.from_object(v1_stateful_set, str(count))
             self.stateful_sets[stateful_set.name] = stateful_set
+            count += 1
 
         return self
 
     def parse_jobs(self) -> Self:
         self.jobs = dict()
 
+        count = 1
+
         for v1_job in self.batch_v1_api.list_job_for_all_namespaces().items:
-            job = Job.from_object(v1_job)
+            job = Job.from_object(v1_job, str(count))
             self.jobs[job.name] = job
+            count += 1
 
         return self
 
     def parse_cron_jobs(self) -> Self:
         self.cron_jobs = dict()
 
+        count = 1
+
         for v1_cron_job in self.batch_v1_api.list_cron_job_for_all_namespaces().items:
-            cron_job = CronJob.from_object(v1_cron_job)
+            cron_job = CronJob.from_object(v1_cron_job, str(count))
             self.cron_jobs[cron_job.name] = cron_job
+            count += 1
 
         return self
 
     def associate_services_with_namespaces(self) -> Self:
         for service in self.services.values():
             namespace = self.namespaces[service.namespace]
-            namespace.add_service(service)
+            namespace.add_graph_node(service)
 
         return self
 
     def associate_pods_with_namespaces(self) -> Self:
         for pod in self.pods.values():
             namespace = self.namespaces[pod.namespace]
-            namespace.add_pod(pod)
+            namespace.add_graph_node(pod)
 
         return self
 
@@ -161,28 +205,28 @@ class Parser:
                         has_labels = has_labels and (key in pod.labels and pod.labels[key] == value)
 
                     if has_labels:
-                        service.add_pod(pod)
+                        service.add_related_node(pod)
 
         return self
 
     def associate_deployments_with_namespaces(self) -> Self:
         for deployment in self.deployments.values():
             namespace = self.namespaces[deployment.namespace]
-            namespace.add_deployment(deployment)
+            namespace.add_graph_node(deployment)
 
         return self
 
     def associate_replica_sets_with_namespaces(self) -> Self:
         for replica_set in self.replica_sets.values():
             namespace = self.namespaces[replica_set.namespace]
-            namespace.add_replica_set(replica_set)
+            namespace.add_graph_node(replica_set)
 
         return self
 
     def associate_replica_sets_with_deployments(self) -> Self:
         for replica_set in self.replica_sets.values():
             deployment = self.deployments[replica_set.deployment_name]
-            deployment.add_replica_set(replica_set)
+            deployment.add_related_node(replica_set)
 
         return self
 
@@ -190,14 +234,14 @@ class Parser:
         for pod in self.pods.values():
             if pod.replica_set_name in self.replica_sets:
                 replica_set = self.replica_sets[pod.replica_set_name]
-                replica_set.add_pod(pod)
+                replica_set.add_related_node(pod)
 
         return self
 
     def associate_stateful_sets_with_namespaces(self) -> Self:
         for stateful_set in self.stateful_sets.values():
             namespace = self.namespaces[stateful_set.namespace]
-            namespace.add_stateful_set(stateful_set)
+            namespace.add_graph_node(stateful_set)
 
         return self
 
@@ -210,14 +254,14 @@ class Parser:
                         has_labels = has_labels and (key in pod.labels and pod.labels[key] == value)
 
                     if has_labels:
-                        stateful_set.add_pod(pod)
+                        stateful_set.add_related_node(pod)
 
         return self
 
     def associate_jobs_with_namespaces(self) -> Self:
         for job in self.jobs.values():
             namespace = self.namespaces[job.namespace]
-            namespace.add_job(job)
+            namespace.add_graph_node(job)
 
         return self
 
@@ -225,14 +269,14 @@ class Parser:
         for pod in self.pods.values():
             if pod.job_name in self.jobs:
                 job = self.jobs[pod.job_name]
-                job.add_pod(pod)
+                job.add_related_node(pod)
 
         return self
 
     def associate_cron_jobs_with_namespaces(self) -> Self:
         for cron_job in self.cron_jobs.values():
             namespace = self.namespaces[cron_job.namespace]
-            namespace.add_cron_job(cron_job)
+            namespace.add_graph_node(cron_job)
 
         return self
 
@@ -240,6 +284,25 @@ class Parser:
         for job in self.jobs.values():
             if job.cron_job_name in self.cron_jobs:
                 cron_job = self.cron_jobs[job.cron_job_name]
-                cron_job.add_job(job)
+                cron_job.add_related_node(job)
+
+        return self
+
+    def organize_into_apps(self) -> Self:
+        for namespace in self.namespaces.values():
+            if namespace.graph_nodes is not None:
+                app_names = {gn.app for gn in namespace.graph_nodes.values() if gn.app is not None}
+
+                count = 1
+                for app_name in app_names:
+                    uid = f"{namespace.id}_{count}"
+                    app = App(app_name, uid)
+                    app_graph_nodes = {gn_id: gn for gn_id, gn in namespace.graph_nodes.items() if gn.app == app_name}
+                    app.graph_nodes = app_graph_nodes
+
+                    namespace.add_graph_node(app)
+                    namespace.remove_graph_nodes(app_graph_nodes)
+
+                    count += 1
 
         return self
