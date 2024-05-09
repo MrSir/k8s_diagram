@@ -5,7 +5,7 @@ from typing import Self
 from kubernetes.client import ApiClient, AppsV1Api, BatchV1Api, CoreV1Api, CustomObjectsApi
 
 from k8s_diagram.types.base import Graph
-from k8s_diagram.types.kubernetes import App, CronJob, Deployment, Job, Namespace, Pod, ReplicaSet, Service, StatefulSet
+from k8s_diagram.types.kubernetes import App, CronJob, Deployment, Job, Namespace, Pod, ReplicaSet, Service, StatefulSet, System
 
 
 @dataclass
@@ -20,6 +20,7 @@ class Parser:
     jobs: dict[str, Job] | None = None
     cron_jobs: dict[str, CronJob] | None = None
     apps: list[App] | None = None
+    systems: dict[str, System] | None = None
 
     @property
     def core_v1_api(self) -> CoreV1Api:
@@ -38,7 +39,7 @@ class Parser:
         return BatchV1Api(api_client=self.api_client)
 
     def parse(self, included_namespaces: set[str] = None, excluded_namespaces: set[str] = None) -> Graph:
-        graph = Graph()
+        graph = Graph("k8s cluster")
 
         (
             self.parse_namespaces()
@@ -62,6 +63,7 @@ class Parser:
             .associate_pods_with_jobs()
             .associate_cron_jobs_with_namespaces()
             .associate_jobs_with_cron_jobs()
+            .organize_into_systems()
             .organize_into_apps()
         )
 
@@ -288,21 +290,48 @@ class Parser:
 
         return self
 
-    def organize_into_apps(self) -> Self:
+    def organize_into_systems(self) -> Self:
+        if self.systems is None:
+            self.systems = dict()
+
         for namespace in self.namespaces.values():
             if namespace.graph_nodes is not None:
-                app_names = {gn.app for gn in namespace.graph_nodes.values() if gn.app is not None}
+                system_names = {gn.system for gn in namespace.graph_nodes.values() if gn.system is not None}
 
                 count = 1
-                for app_name in app_names:
+                for system_name in system_names:
                     uid = f"{namespace.id}_{count}"
-                    app = App(app_name, uid)
-                    app_graph_nodes = {gn_id: gn for gn_id, gn in namespace.graph_nodes.items() if gn.app == app_name}
-                    app.graph_nodes = app_graph_nodes
+                    system = System(system_name, uid)
+                    system_graph_nodes = {gn_id: gn for gn_id, gn in namespace.graph_nodes.items() if gn.system == system_name}
+                    system.graph_nodes = system_graph_nodes
 
-                    namespace.add_graph_node(app)
-                    namespace.remove_graph_nodes(app_graph_nodes)
+                    self.systems[system.id] = system
+
+                    namespace.add_graph_node(system)
+                    namespace.remove_graph_nodes(system_graph_nodes)
 
                     count += 1
+
+        return self
+
+    def organize_into_apps(self) -> Self:
+        buckets = [self.systems.values(), self.namespaces.values()]
+
+        for bucket in buckets:
+            for cluster in bucket:
+                if cluster.graph_nodes is not None:
+                    app_names = {gn.app for gn in cluster.graph_nodes.values() if gn.app is not None}
+
+                    count = 1
+                    for app_name in app_names:
+                        uid = f"{cluster.id}_{count}"
+                        app = App(app_name, uid)
+                        app_graph_nodes = {gn_id: gn for gn_id, gn in cluster.graph_nodes.items() if gn.app == app_name}
+                        app.graph_nodes = app_graph_nodes
+
+                        cluster.add_graph_node(app)
+                        cluster.remove_graph_nodes(app_graph_nodes)
+
+                        count += 1
 
         return self

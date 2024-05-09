@@ -2,6 +2,9 @@ import uuid
 from abc import abstractmethod
 from dataclasses import dataclass
 
+from diagrams import Cluster, Diagram
+from kubernetes.client import V1ObjectMeta
+
 
 @dataclass
 class GraphNode:
@@ -10,6 +13,7 @@ class GraphNode:
     uid: str
     namespace: str | None = None
     app: str | None = None
+    system: str | None = None
     css_class: str | None = None
     related_nodes: dict[str, "GraphNode"] | None = None
     __id: str | None = None
@@ -42,10 +46,38 @@ class GraphNode:
 
         return f"{self.id} --> {related_node_ids}\n"
 
+    def to_diagrams(self) -> None:
+        diagrams_node = self.diagrams_node
+
+        if self.related_nodes is not None:
+            for node in self.related_nodes.values():
+                diagrams_node >> node.diagrams_node
+
+    @staticmethod
+    def resolve_app_name(metadata: V1ObjectMeta) -> str | None:
+        app = None
+        if metadata.labels is not None:
+            if "app.kubernetes.io/name" in metadata.labels:
+                app = metadata.labels["app.kubernetes.io/name"]
+            elif "app" in metadata.labels:
+                app = metadata.labels["app"]
+
+        return app
+
+    @staticmethod
+    def resolve_system_name(metadata: V1ObjectMeta) -> str | None:
+        system = None
+        if metadata.labels is not None and "app.kubernetes.io/part-of" in metadata.labels:
+            system = metadata.labels["app.kubernetes.io/part-of"]
+
+        return system
+
 
 @dataclass
 class Graph:
+    title: str
     graph_nodes: dict[str, GraphNode] | None = None
+    color: str | None = None
 
     @property
     def styles(self) -> str:
@@ -82,6 +114,12 @@ class Graph:
 
         return code
 
+    def to_diagrams(self) -> None:
+        with Diagram(self.title, show=False, filename="diagrams/diagram", direction="TB"):
+            if self.graph_nodes is not None:
+                for graph_node in self.graph_nodes.values():
+                    graph_node.to_diagrams()
+
 
 class SubGraph(GraphNode, Graph):
     def to_mermaid_js_code(self) -> str:
@@ -96,3 +134,12 @@ class SubGraph(GraphNode, Graph):
         code += f"end\n"
 
         return code
+
+    def to_diagrams(self) -> None:
+        graph_attr = {}
+        if self.color is not None:
+            graph_attr["bgcolor"] = self.color
+
+        with Cluster(f"{self.prefix}: {self.name}", graph_attr=graph_attr):
+            for graph_node in self.graph_nodes.values():
+                graph_node.to_diagrams()
