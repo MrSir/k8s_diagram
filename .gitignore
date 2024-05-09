@@ -161,4 +161,4 @@ cython_debug/
 
 *example_files
 .DS_Store
-.diagrams/*.png
+/diagrams/*.png
